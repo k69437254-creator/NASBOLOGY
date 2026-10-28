@@ -200,7 +200,7 @@ private fun NasbologyApp() {
     var participantName by remember { mutableStateOf("") }
     val faceResult = remember(biometricResult) {
         if (biometricResult.contains("الغموض")) "ملامح مال مناويچ"
-        else "ملامح سينمائية بطابع مشرق"
+        else "بشرفك مقتنع بوجهك"
     }
 
     val requestBiometric: () -> Unit = {

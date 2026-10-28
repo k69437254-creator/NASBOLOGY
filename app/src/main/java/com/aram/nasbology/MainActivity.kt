@@ -525,11 +525,7 @@ private fun WelcomeScreen(
             Spacer(Modifier.width(10.dp))
             Text("ابدأ الفحص", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
-        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.EditNote, null)
-            Spacer(Modifier.width(8.dp))
-            Text("تعديل الأسئلة")
-        }
+        
         Spacer(Modifier.height(4.dp))
         TextButton(onClick = onDeveloper) {
             Icon(Icons.Default.Code, null, tint = ColorMuted)
@@ -763,7 +759,7 @@ private fun CameraFaceScanScreen(faceResult: String, onContinue: () -> Unit, onB
 
     ScreenFrame {
         TopBar("مشهد الوجه", onBack)
-        Text("ضع وجهك أمام الكاميرا", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = ColorText)
+        Text("خلّي وجهك الخايس گدام الكامرة", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = ColorText)
         if (permissionGranted) {
             if (!scanComplete) {
                 Surface(
@@ -841,7 +837,7 @@ private fun CameraFaceScanScreen(faceResult: String, onContinue: () -> Unit, onB
             Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
                 Text("السماح باستخدام الكاميرا")
             }
-            OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("متابعة إلى جلسة المستشار النفسي") }
+            OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("متابعة إلى جلسة الطبيب النفسي") }
         }
     }
 }
@@ -902,11 +898,7 @@ private fun HomeScreen(
             Spacer(Modifier.width(10.dp))
             Text("ابدأ الفحص", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
-        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Icon(Icons.Default.Edit, null)
-            Spacer(Modifier.width(8.dp))
-            Text("إضافة الأسئلة وتعديل الاستنتاجات")
-        }
+        
         if (configuredCount == 0) Text("لا توجد أسئلة مكتملة", color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         OutlinedButton(onClick = onDeveloper, modifier = Modifier.fillMaxWidth()) {
@@ -917,87 +909,6 @@ private fun HomeScreen(
     }
 }
 
-@Composable
-private fun QuestionEditorScreen(
-    questions: List<EditableQuestion>,
-    onQuestionsChange: (List<EditableQuestion>) -> Unit,
-    onSave: () -> Unit,
-    onBack: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            TopBar("إعداد الأسئلة", onBack)
-            Text("20 خانة قابلة للتعديل", fontSize = 23.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "اكتب نص السؤال واستنتاجين مخصصين له. لن يدخل السؤال في الاختبار إلا إذا امتلأت الحقول الثلاثة.",
-                color = ColorMuted, lineHeight = 21.sp
-            )
-            Spacer(Modifier.height(3.dp))
-        }
-        items(questions, key = { it.number }) { question ->
-            val index = question.number - 1
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = ColorPanel,
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, if (question.isConfigured) Color(0xFF6B3CB5) else Color(0xFF342740))
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("السؤال ${question.number}", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                        Text(if (question.isConfigured) "جاهز" else "غير مكتمل", color = if (question.isConfigured) Color(0xFFB9F6CA) else ColorMuted, fontSize = 11.sp)
-                    }
-                    OutlinedTextField(
-                        value = question.prompt,
-                        onValueChange = { value -> onQuestionsChange(questions.updated(index) { copy(prompt = value) }) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("نص السؤال") },
-                        placeholder = { Text("اكتب السؤال هنا") },
-                        minLines = 2,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    OutlinedTextField(
-                        value = question.yesConclusion,
-                        onValueChange = { value -> onQuestionsChange(questions.updated(index) { copy(yesConclusion = value) }) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("الاستنتاج عند الإجابة: نعم") },
-                        placeholder = { Text("اكتب الاستنتاج الذي تريد إظهاره") },
-                        minLines = 2,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    OutlinedTextField(
-                        value = question.noConclusion,
-                        onValueChange = { value -> onQuestionsChange(questions.updated(index) { copy(noConclusion = value) }) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("الاستنتاج عند الإجابة: لا") },
-                        placeholder = { Text("اكتب الاستنتاج البديل") },
-                        minLines = 2,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            }
-        }
-        item {
-            Button(
-                onClick = onSave,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)
-            ) {
-                Icon(Icons.Default.Save, null)
-                Spacer(Modifier.width(8.dp))
-                Text("حفظ الأسئلة على الجهاز")
-            }
-            Text("تُحفظ الأسئلة والاستنتاجات محليًا، وتبقى محفوظة بعد إغلاق التطبيق.", color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
 
 private fun List<EditableQuestion>.updated(index: Int, transform: EditableQuestion.() -> EditableQuestion): List<EditableQuestion> =
     toMutableList().also { it[index] = it[index].transform() }

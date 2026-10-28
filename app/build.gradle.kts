@@ -1,3 +1,6 @@
+import java.net.HttpURLConnection
+import java.net.URL
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -78,7 +81,7 @@ val downloadIbmPlexArabicFonts by tasks.registering {
             if (!target.isFile || target.length() < 10_000) {
                 val temp = fontDir.resolve("$resourceName.download")
                 try {
-                    java.net.URL(fontBaseUrl + upstreamName).openConnection().apply {
+                    (URL(fontBaseUrl + upstreamName).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 20_000
                         readTimeout = 30_000
                     }.getInputStream().use { input ->
@@ -98,7 +101,7 @@ val downloadIbmPlexArabicFonts by tasks.registering {
             val licenseUrl = "https://raw.githubusercontent.com/googlefonts/plex/master/packages/plex-sans-arabic/LICENSE.txt"
             val tempLicense = licenseDir.resolve("IBM-Plex-Sans-Arabic-OFL.txt.download")
             try {
-                java.net.URL(licenseUrl).openConnection().apply {
+                (URL(licenseUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 20_000
                     readTimeout = 30_000
                 }.getInputStream().use { input ->

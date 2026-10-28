@@ -3,12 +3,13 @@ package com.aram.nasbology
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aram.nasbology.engine.EditableQuestion
 
 @Composable
 internal fun QuestionEditorScreen(
@@ -17,7 +18,7 @@ internal fun QuestionEditorScreen(
     onSave: () -> Unit,
     onBack: () -> Unit
 ) {
-    var editedQuestions by remember(questions) {
+    var editedQuestions by remember {
         mutableStateOf(questions)
     }
 
@@ -28,30 +29,36 @@ internal fun QuestionEditorScreen(
     ) {
         Text(
             text = "تعديل الأسئلة",
-            fontSize = 24.sp,
-            style = MaterialTheme.typography.headlineSmall
+            fontSize = 24.sp
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            itemsIndexed(editedQuestions) { index, question ->
+            items(
+                items = editedQuestions,
+                key = { it.number }
+            ) { question ->
+
                 Card(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("السؤال ${index + 1}")
+                        Text("السؤال ${question.number}")
 
                         OutlinedTextField(
-                            value = question.question,
+                            value = question.prompt,
                             onValueChange = { value ->
-                                editedQuestions = editedQuestions.toMutableList().also {
-                                    it[index] = question.copy(question = value)
+                                editedQuestions = editedQuestions.map {
+                                    if (it.number == question.number)
+                                        it.copy(prompt = value)
+                                    else it
                                 }
                             },
                             label = { Text("نص السؤال") },
@@ -59,24 +66,28 @@ internal fun QuestionEditorScreen(
                         )
 
                         OutlinedTextField(
-                            value = question.yesResult,
+                            value = question.yesConclusion,
                             onValueChange = { value ->
-                                editedQuestions = editedQuestions.toMutableList().also {
-                                    it[index] = question.copy(yesResult = value)
+                                editedQuestions = editedQuestions.map {
+                                    if (it.number == question.number)
+                                        it.copy(yesConclusion = value)
+                                    else it
                                 }
                             },
-                            label = { Text("نتيجة الإجابة بنعم") },
+                            label = { Text("نتيجة نعم") },
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         OutlinedTextField(
-                            value = question.noResult,
+                            value = question.noConclusion,
                             onValueChange = { value ->
-                                editedQuestions = editedQuestions.toMutableList().also {
-                                    it[index] = question.copy(noResult = value)
+                                editedQuestions = editedQuestions.map {
+                                    if (it.number == question.number)
+                                        it.copy(noConclusion = value)
+                                    else it
                                 }
                             },
-                            label = { Text("نتيجة الإجابة بلا") },
+                            label = { Text("نتيجة لا") },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -84,7 +95,7 @@ internal fun QuestionEditorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(Modifier.height(12.dp))
 
         Button(
             onClick = {
@@ -104,4 +115,3 @@ internal fun QuestionEditorScreen(
         }
     }
 }
-

@@ -101,7 +101,7 @@ private val ColorBg = Color(0xFF080610)
 private val ColorPanel = Color(0xFF151020)
 private val ColorPurple = Color(0xFF9B5CFF)
 private val ColorPink = Color(0xFFFF4F91)
-private val ColorText = Color(0xFFF5F0FF)
+private val ColorText = Color(0xFFFFFFFF)
 private val ColorMuted = Color(0xFFD7CDE5)
 
 /** IBM Plex Sans Arabic fonts are downloaded by the app module's Gradle preBuild task. */
@@ -265,14 +265,21 @@ private fun NasbologyApp() {
         typography = NasbologyTypography,
         colorScheme = darkColorScheme(
             primary = ColorPurple,
+            onPrimary = Color.White,
             secondary = ColorPink,
+            onSecondary = Color.White,
             background = ColorBg,
-            surface = ColorPanel,
             onBackground = ColorText,
-            onSurface = ColorText
+            surface = ColorPanel,
+            onSurface = ColorText,
+            onSurfaceVariant = ColorText,
+            outline = Color(0xFF634391)
         )
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides LayoutDirection.Rtl,
+            LocalContentColor provides ColorText
+        ) {
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(listOf(Color(0xFF170B2B), ColorBg, Color(0xFF090711)))
@@ -1019,27 +1026,70 @@ private fun ResultScreen(
     var faceExpanded by remember { mutableStateOf(false) }
 
     ScreenFrame {
-        TopBar("تقرير الطبيب النفسي", onBack = onAgain)
-        Box(
-            Modifier.size(110.dp).background(
-                Brush.radialGradient(listOf(Color(0xFF6339A1), Color(0xFF20132F), Color.Transparent)), CircleShape
-            ), contentAlignment = Alignment.Center
-        ) { Icon(Icons.Default.Psychology, null, tint = ColorPurple, modifier = Modifier.size(65.dp)) }
-        Text("تقرير الطبيب النفسي", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
+        TopBar("تقرير نسبولوجي", onBack = onAgain)
         Surface(
-            modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
-            shape = RoundedCornerShape(26.dp), border = BorderStroke(1.dp, ColorPurple)
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF100B1B),
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(1.dp, Color(0xFF634391))
         ) {
-            Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Text("$percent%", color = ColorText, fontSize = 48.sp, fontWeight = FontWeight.Black)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(13.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF241536),
+                    border = BorderStroke(1.dp, Color(0xFF634391))
+                ) {
+                    Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(42.dp))
+                    }
+                }
+                Text("NASBOLOGY", color = ColorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("التقرير النهائي", color = ColorText, fontSize = 25.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                HorizontalDivider(color = Color(0xFF49345F))
+                Text("النسبة المسجلة", color = ColorMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Box(
+                    modifier = Modifier.size(132.dp).background(
+                        Brush.radialGradient(listOf(Color(0xFF6339A1), Color(0xFF2B1745), Color(0xFF171020))),
+                        CircleShape
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("$percent%", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Black)
+                }
                 LinearProgressIndicator(
-                    progress = { percent / 100f }, modifier = Modifier.fillMaxWidth().height(9.dp),
-                    color = ColorPurple, trackColor = Color(0xFF35263E)
+                    progress = { percent / 100f },
+                    modifier = Modifier.fillMaxWidth().height(9.dp),
+                    color = ColorPurple,
+                    trackColor = Color(0xFF35263E)
                 )
-                Text(verdict, color = ColorText, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 27.sp)
-                Text("التقرير الشخصي لـ ${name.ifBlank { "زائر نسبولوجي" }}", color = ColorMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF21162F),
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Color(0xFF634391))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 17.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text("التصنيف النهائي", color = ColorMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(verdict, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 30.sp)
+                    }
+                }
+                Text(
+                    "التقرير الشخصي لـ ${name.ifBlank { "زائر نسبولوجي" }}",
+                    color = ColorMuted,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
             }
         }
+        Text("تفاصيل التقرير", color = ColorText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         ResultDetailAccordion(
             title = "نتيجة بصمة الأصبع", detail = biometricResult,
             icon = { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(30.dp)) },
@@ -1128,11 +1178,11 @@ private fun createReportBitmap(
     val muted = android.graphics.Color.rgb(103, 91, 119)
     val lilac = android.graphics.Color.rgb(105, 61, 158)
     val blocks = mutableListOf<ReportTextBlock>()
-    blocks += ReportTextBlock("تقرير المستشار النفسي", 48f, lilac, true, 18)
-    blocks += ReportTextBlock("NASBOLOGY  •  ملف التجربة", 25f, muted, true, 36)
+    blocks += ReportTextBlock("تقرير المستشار النفسي", 48f, android.graphics.Color.WHITE, true, 18)
+    blocks += ReportTextBlock("NASBOLOGY  •  ملف التجربة", 25f, android.graphics.Color.rgb(224, 211, 244), true, 36)
     blocks += ReportTextBlock(
         " ${name.ifBlank { "زائر " }} مرحبًا، هذا تقريرك الجيني بالكامل مع استشارة الطبيب النفسي كذلك حول تحديد هويتك وفحص نسبك.",
-        30f, white, false, 34
+        30f, android.graphics.Color.WHITE, false, 34
     )
     val analysis = QuestionnaireEngine.calculateResult(answers)
     val percent = analysis.percentage
@@ -1167,6 +1217,12 @@ private fun createReportBitmap(
     }
     val layouts = blocks.map { layoutFor(it) }
     val top = 150
+    val blockTopPositions = mutableListOf<Float>()
+    var measuredY = top.toFloat()
+    layouts.forEachIndexed { index, layout ->
+        blockTopPositions += measuredY
+        measuredY += (layout.height + blocks[index].gap).toFloat()
+    }
     val bottom = 100
     val contentHeight = layouts.indices.sumOf { layouts[it].height + blocks[it].gap }
     val height = (top + contentHeight + bottom).coerceAtLeast(1600)
@@ -1178,14 +1234,43 @@ private fun createReportBitmap(
             null, Shader.TileMode.CLAMP)
     }
     canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), background)
+    val headerBottom = (blockTopPositions[3] - 14f).coerceAtLeast(300f)
+    val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(
+            0f, 0f, width.toFloat(), headerBottom,
+            intArrayOf(android.graphics.Color.rgb(57, 32, 89), android.graphics.Color.rgb(27, 15, 43)),
+            null, Shader.TileMode.CLAMP
+        )
+    }
+    canvas.drawRoundRect(RectF(27f, 27f, width - 27f, headerBottom), 36f, 36f, headerPaint)
     val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.argb(90, 129, 93, 164)
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }
     canvas.drawRoundRect(RectF(26f, 26f, width - 26f, height - 26f), 38f, 38f, cardPaint)
-    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = lilac; strokeWidth = 5f }
+    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(207, 174, 255)
+        strokeWidth = 5f
+    }
     canvas.drawLine(padding.toFloat(), 100f, (width - padding).toFloat(), 100f, accentPaint)
+    val resultCardRect = RectF(
+        padding - 18f,
+        blockTopPositions[3] - 12f,
+        width - padding + 18f,
+        blockTopPositions[4] + layouts[4].height + 12f
+    )
+    val resultCardFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(244, 237, 252)
+        style = Paint.Style.FILL
+    }
+    canvas.drawRoundRect(resultCardRect, 28f, 28f, resultCardFill)
+    val resultCardBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(194, 163, 231)
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    canvas.drawRoundRect(resultCardRect, 28f, 28f, resultCardBorder)
     var y = top.toFloat()
     layouts.forEachIndexed { index, layout ->
         canvas.save()

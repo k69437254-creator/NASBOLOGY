@@ -100,8 +100,13 @@ class QuestionnaireEngineTest {
 
         assertEquals(100, QuestionnaireEngine.calculateResult(allYes).percentage)
         assertEquals(0, QuestionnaireEngine.calculateResult(allNo).percentage)
-        assertEquals("طابع تفاعلي مرتفع", QuestionnaireEngine.calculateResult(allYes).verdict)
-        assertEquals("طابع متحفظ", QuestionnaireEngine.calculateResult(allNo).verdict)
+        assertEquals("ابن شرعي", QuestionnaireEngine.calculateResult(allYes).verdict)
+        assertEquals("ابن زنا من العيار الثقيل", QuestionnaireEngine.calculateResult(allNo).verdict)
+        val middleScore = questions.mapIndexed { index, question ->
+            SubmittedAnswer(question, index < 11)
+        }
+        assertEquals(55, QuestionnaireEngine.calculateResult(middleScore).percentage)
+        assertEquals("مثير للشبهة (مشكوك في أمر نسبك)", QuestionnaireEngine.calculateResult(middleScore).verdict)
         assertTrue(QuestionnaireEngine.weightForQuestion(1) != QuestionnaireEngine.weightForQuestion(3))
         val oneHighWeightYes = allNo.toMutableList().also { it[0] = SubmittedAnswer(questions[0], true) }
         val oneLowWeightYes = allNo.toMutableList().also { it[2] = SubmittedAnswer(questions[2], true) }

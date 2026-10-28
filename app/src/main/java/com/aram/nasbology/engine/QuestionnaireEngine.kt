@@ -305,9 +305,9 @@ object QuestionnaireEngine {
         }
 
         val verdict = when {
-            percentage >= 70 -> "طابع تفاعلي مرتفع"
-            percentage <= 30 -> "طابع متحفظ"
-            else -> "طابع متوازن"
+            percentage >= 70 -> "ابن شرعي"
+            percentage <= 30 -> "ابن زنا من العيار الثقيل"
+            else -> "مثير للشبهة (مشكوك في أمر نسبك)"
         }
 
         return QuestionnaireResult(percentage, verdict)

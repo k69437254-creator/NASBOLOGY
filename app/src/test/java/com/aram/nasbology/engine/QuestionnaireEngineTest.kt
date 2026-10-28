@@ -14,13 +14,35 @@ class QuestionnaireEngineTest {
     }
 
     @Test
-    fun `starter questionnaire has twenty complete entertainment questions`() {
+    fun `starter questionnaire preserves the twenty selected questions`() {
         val questions = QuestionnaireEngine.starterQuestionnaire()
         assertEquals(20, questions.size)
         assertTrue(questions.all { it.isConfigured })
-        assertTrue(questions.none {
-            (it.prompt + " " + it.yesConclusion + " " + it.noConclusion).contains("ابن زنا")
-        })
+        assertEquals(
+            listOf(
+                "هل تحب آرام؟",
+                "هل تحب سكولر؟",
+                "هل تشبه والديك؟",
+                "هل تشجع ريال مدريد؟",
+                "هل تحفظ أسرار أصحابك؟",
+                "هل أنت سني؟",
+                "هل تشعر أنك مختلف عن محيطك؟",
+                "هل تحلم أن تدخل تخصص طبي؟",
+                "هل تغيّر إجابتك أحيانًا لتجنب مشكلة؟",
+                "هل سبق أن بالغت في قصة لتبدو أكثر إثارة؟",
+                "هل تجد صعوبة في الاعتراف بخطئك؟",
+                "هل سبق أن أسأت فهم نية شخص قريب منك؟",
+                "هل تتخذ قرارًا ثم تندم عليه بسرعة؟",
+                "هل تشجع برشلونة؟",
+                "هل عشت طفولتك في منزل كان يجمع أشخاصًا تجمعهم مجرد مصلحة أو ستر فضيحة؟",
+                "هل أنت ابن أخطائهم أم مجرد ضحية لقصة لم يُسمح لك بمعرفتها؟",
+                "هل تتصرف بثقة حتى عندما لا تكون متأكدًا؟",
+                "هل سبق أن غيّرت رأيك بسبب ضغط الآخرين؟",
+                "هل تشعر بالفضول تجاه أسرار العائلة القديمة؟",
+                "هل تستطيع الاحتفاظ بسر حتى لو كان من الصعب عليك ذلك؟"
+            ),
+            questions.map { it.prompt }
+        )
     }
 
     @Test

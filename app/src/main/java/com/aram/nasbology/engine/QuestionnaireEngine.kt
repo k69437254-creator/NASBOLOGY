@@ -172,9 +172,9 @@ object QuestionnaireEngine {
         )
     )
 
-    /** Returns the safe, built-in entertainment questionnaire. */
+    /** Returns the twenty questions selected for NASBOLOGY. */
     fun starterQuestionnaire(): List<EditableQuestion> =
-        legacyStarterQuestionnaire()
+        previousClaimingStarterQuestionnaire()
 
     /**
      * Preserves configured saved questions.
@@ -230,7 +230,7 @@ object QuestionnaireEngine {
         if (saved.size != SLOT_COUNT) return saved
 
         val current = starterQuestionnaire()
-        val previous = previousClaimingStarterQuestionnaire()
+        val previous = legacyStarterQuestionnaire()
 
         return saved.mapIndexed { index, question ->
             val safe = current[index]

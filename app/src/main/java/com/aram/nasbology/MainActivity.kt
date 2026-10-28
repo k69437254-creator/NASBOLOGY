@@ -199,7 +199,7 @@ private fun NasbologyApp() {
     var biometricVerified by remember { mutableStateOf(false) }
     var participantName by remember { mutableStateOf("") }
     val faceResult = remember(biometricResult) {
-        if (biometricResult.contains("الغموض")) "ملامح سينمائية بطابع غامض"
+        if (biometricResult.contains("الغموض")) "ملامح مال مناويچ"
         else "ملامح سينمائية بطابع مشرق"
     }
 
@@ -430,8 +430,8 @@ private fun NasbologyApp() {
 private val legacyBiometricResultKey = stringPreferencesKey("biometric_result_once_v2")
 
 private val biometricResultOptions = listOf(
-    "نتيجة المحاكاة: ملفّك يحمل أجواء الغموض، والقصة ما زالت مفتوحة.",
-    "نتيجة المحاكاة: ملفّك يحمل أجواء التفاؤل، والقصة تحمل مفاجآت جميلة."
+    "نتيجة بصمة الاصبع: للأسف طلعت ابن گحبة .",
+    "نتيجة بصمة الاصبع: شريف نوعًا ما ."
 )
 
 private fun biometricResultKeyFor(name: String) = run {
@@ -491,7 +491,7 @@ private fun WelcomeScreen(
                     Text("مختبر نسبولوجي", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
                 Text(
-                    "مرحبًا بك في مختبر نسبولوجي الخاص بتجربة آرام أويال. خض جولة تفاعلية في عالم الأسئلة والمحاكاة، واكتشف كيف تتغير خلاصة تجربتك مع اختياراتك. هل أنت مستعد لأخذ جولة في مختبري؟",
+                    "مرحبًا في مختبر نسبولوجي الخاص بالطبيب آرام أويال ، من المؤكد أنك أحد الأشخاص الذي يشكون في نسبهم الصحيح ويعانون من مشاكل نفسية كثيرة حيال هذا الأمر، لا تقلق أنت في المكان الصحيح برفقة الطبيب آرام، هل أنت مُستعد لأخذ جولة في مختبري ؟",
                     fontSize = 17.sp, lineHeight = 28.sp, color = ColorText, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium
                 )
             }
@@ -624,7 +624,7 @@ private fun BiometricResultScreen(result: String, onContinue: () -> Unit) {
         ) {
             Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(62.dp))
         }
-        Text("نتيجة التجربة", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
+        Text("نتيجة البصمة", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
         Surface(
             modifier = Modifier.fillMaxWidth(), color = Color(0xFF1B1027), shape = RoundedCornerShape(24.dp),
             border = BorderStroke(1.dp, if (isMysterious) ColorPink else ColorPurple)
@@ -643,7 +643,7 @@ private fun BiometricResultScreen(result: String, onContinue: () -> Unit) {
         ) {
             Icon(Icons.Default.Face, null)
             Spacer(Modifier.width(8.dp))
-            Text("الانتقال إلى مشهد الوجه", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("فحص ملامح وجهك", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -819,7 +819,7 @@ private fun CameraFaceScanScreen(faceResult: String, onContinue: () -> Unit, onB
                                 Brush.radialGradient(listOf(Color(0xFF7043A8), Color(0xFF20142E), Color.Transparent)), CircleShape
                             ), contentAlignment = Alignment.Center
                         ) { Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(68.dp)) }
-                        Text("اكتمل المشهد", fontSize = 22.sp, color = ColorText, fontWeight = FontWeight.Bold)
+                        Text("اكتمل التحليل", fontSize = 22.sp, color = ColorText, fontWeight = FontWeight.Bold)
                         Text(faceResult, fontSize = 21.sp, color = ColorText, lineHeight = 31.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -829,7 +829,7 @@ private fun CameraFaceScanScreen(faceResult: String, onContinue: () -> Unit, onB
                 ) {
                     Icon(Icons.Default.Psychology, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("الانتقال إلى جلسة المستشار النفسي", fontWeight = FontWeight.Bold)
+                    Text("الانتقال إلى جلسة الطبيب النفسي", fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -890,7 +890,7 @@ private fun HomeScreen(
         ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(92.dp)) }
         BrandHeader()
         Text(
-            "مرحبًا بك في نسبولوجي؛ خض تجربة تفاعلية تتكوّن من مشاهد محاكاة وأسئلة واختيارات، ثم شاهد نتيجتك النهائية في تقرير واحد.",
+            " مرحبًا بك مُجددًا في مختبر نسبولوجي الخاص بالطبيب آرام أويال، هل ترغب أن تقوم بفحص نسبك وتحديد هويتك الحقيقية إذا كُنت تشك في نفسك؟ ابدأ الفحص الآن. .",
             color = ColorText, fontSize = 17.sp, textAlign = TextAlign.Center, lineHeight = 28.sp
         )
         Button(
@@ -1011,7 +1011,7 @@ private fun QuestionScreen(
 ) {
     val question = questions[index]
     ScreenFrame {
-        TopBar("جلسة المستشار النفسي", onBack)
+        TopBar("جلسة الطبيب النفسي", onBack)
         Surface(
             modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
             shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color(0xFF634391))
@@ -1029,7 +1029,7 @@ private fun QuestionScreen(
                 Text(question.prompt, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 33.sp, color = ColorText)
             }
         }
-        listOf(true to "نعم، هذا ينطبق عليّ" to ColorPurple, false to "لا، هذا لا ينطبق عليّ" to ColorPink).forEach { triple ->
+        listOf(true to "نعم" to ColorPurple, false to "لا" to ColorPink).forEach { triple ->
             val answer = triple.first.first
             val label = triple.first.second
             val accent = triple.second
@@ -1108,13 +1108,13 @@ private fun ResultScreen(
     var faceExpanded by remember { mutableStateOf(false) }
 
     ScreenFrame {
-        TopBar("تقرير المستشار النفسي", onBack = onAgain)
+        TopBar("تقرير الطبيب النفسي", onBack = onAgain)
         Box(
             Modifier.size(110.dp).background(
                 Brush.radialGradient(listOf(Color(0xFF6339A1), Color(0xFF20132F), Color.Transparent)), CircleShape
             ), contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Psychology, null, tint = ColorPurple, modifier = Modifier.size(65.dp)) }
-        Text("تقرير المستشار النفسي", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
+        Text("تقرير الطبيب النفسي", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
         Surface(
             modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
             shape = RoundedCornerShape(26.dp), border = BorderStroke(1.dp, ColorPurple)
@@ -1130,12 +1130,12 @@ private fun ResultScreen(
             }
         }
         ResultDetailAccordion(
-            title = "نتيجة مشهد البصمة", detail = biometricResult,
+            title = "نتيجة بصمة الأصبع", detail = biometricResult,
             icon = { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(30.dp)) },
             expanded = fingerprintExpanded, onToggle = { fingerprintExpanded = !fingerprintExpanded }
         )
         ResultDetailAccordion(
-            title = "نتيجة مشهد الوجه", detail = faceResult,
+            title = "نتيجة تحليل ملامح الوجه", detail = faceResult,
             icon = { Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(30.dp)) },
             expanded = faceExpanded, onToggle = { faceExpanded = !faceExpanded }
         )
@@ -1220,7 +1220,7 @@ private fun createReportBitmap(
     blocks += ReportTextBlock("تقرير المستشار النفسي", 48f, lilac, true, 18)
     blocks += ReportTextBlock("NASBOLOGY  •  ملف التجربة", 25f, muted, true, 36)
     blocks += ReportTextBlock(
-        "مرحبًا عزيزي ${name.ifBlank { "زائر نسبولوجي" }}، هذا التقرير النهائي والكامل لتجربتك الترفيهية في نسبولوجي؛ يجمع نتيجة الاستنتاج من اختياراتك ونتيجتي مشهدَي المحاكاة في ملف واحد.",
+        " ${name.ifBlank { "زائر " }} مرحبًا، هذا تقريرك الجيني بالكامل مع استشارة الطبيب النفسي كذلك حول تحديد هويتك وفحص نسبك.",
         30f, white, false, 34
     )
     val analysis = QuestionnaireEngine.calculateResult(answers)
@@ -1228,9 +1228,9 @@ private fun createReportBitmap(
     val verdict = analysis.verdict
     blocks += ReportTextBlock("النتيجة النهائية", 34f, lilac, true, 14)
     blocks += ReportTextBlock("$percent%\n$verdict", 31f, white, true, 30)
-    blocks += ReportTextBlock("نتيجة مشهد البصمة", 29f, lilac, true, 10)
+    blocks += ReportTextBlock("نتيجة بصمة الأصبع", 29f, lilac, true, 10)
     blocks += ReportTextBlock(biometricResult, 27f, white, false, 26)
-    blocks += ReportTextBlock("نتيجة مشهد الوجه", 29f, lilac, true, 10)
+    blocks += ReportTextBlock("نتيجة ملامحك", 29f, lilac, true, 10)
     blocks += ReportTextBlock(faceResult, 27f, white, false, 30)
     blocks += ReportTextBlock("تفاصيل الجلسة", 34f, lilac, true, 16)
     answers.forEachIndexed { index, answer ->
@@ -1239,7 +1239,7 @@ private fun createReportBitmap(
         blocks += ReportTextBlock("الخلاصة: ${answer.conclusion}", 24f, white, false, 25)
     }
     blocks += ReportTextBlock("Aram Aoyal", 32f, lilac, true, 8)
-    blocks += ReportTextBlock("معدّ التجربة", 22f, muted, false, 24)
+    blocks += ReportTextBlock("الطبيب النفسي", 22f, muted, false, 24)
 
     fun layoutFor(block: ReportTextBlock): StaticLayout {
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {

@@ -1,4 +1,3 @@
-import java.net.URL
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,8 +12,8 @@ android {
         applicationId = "com.aram.nasbology"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -79,7 +78,7 @@ val downloadIbmPlexArabicFonts by tasks.registering {
             if (!target.isFile || target.length() < 10_000) {
                 val temp = fontDir.resolve("$resourceName.download")
                 try {
-                    URL(fontBaseUrl + upstreamName).openConnection().apply {
+                    java.net.URL(fontBaseUrl + upstreamName).openConnection().apply {
                         connectTimeout = 20_000
                         readTimeout = 30_000
                     }.getInputStream().use { input ->
@@ -99,7 +98,7 @@ val downloadIbmPlexArabicFonts by tasks.registering {
             val licenseUrl = "https://raw.githubusercontent.com/googlefonts/plex/master/packages/plex-sans-arabic/LICENSE.txt"
             val tempLicense = licenseDir.resolve("IBM-Plex-Sans-Arabic-OFL.txt.download")
             try {
-                URL(licenseUrl).openConnection().apply {
+                java.net.URL(licenseUrl).openConnection().apply {
                     connectTimeout = 20_000
                     readTimeout = 30_000
                 }.getInputStream().use { input ->

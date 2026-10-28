@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="nasbology_report_images" path="Pictures/Nasbology/" />
+    <files-path name="nasbology_private_report_images" path="Nasbology/" />
+</paths>

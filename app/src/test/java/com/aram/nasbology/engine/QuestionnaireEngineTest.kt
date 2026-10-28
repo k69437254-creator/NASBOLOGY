@@ -14,33 +14,13 @@ class QuestionnaireEngineTest {
     }
 
     @Test
-    fun `starter questionnaire contains the exact twenty supplied questions and conclusions`() {
-        val expected = listOf(
-            EditableQuestion(1, "هل تحب آرام؟", "أنت شريف جدًا.", "أنت أبن زنا من المستوى العاشر"),
-            EditableQuestion(2, "هل تحب سكولر؟", "كسمك أنت ابن زنا", "شريف والله"),
-            EditableQuestion(3, "هل تشبه والديك؟", "حَبيبي أنت شريف", "أنت ابن زنا للأسف"),
-            EditableQuestion(4, "هل تشجع ريال مدريد؟", "لعد شگد ابن زنا أنت", "شريف"),
-            EditableQuestion(5, "هل تحفظ أسرار أصحابك؟", "عاشت ايدك أنت شريف", "أنت ابن زنا"),
-            EditableQuestion(6, "هل أنت سني؟", "طلعت ابن زنا", "الحمدلله شريف"),
-            EditableQuestion(7, "هل تشعر أنك مختلف عن محيطك؟", "يعني أنت ابن زنا", "أنت شريف"),
-            EditableQuestion(8, "هل تحلم أن تدخل تخصص طبي؟", "ابن زنا", "شريف"),
-            EditableQuestion(9, "هل تغيّر إجابتك أحيانًا لتجنب مشكلة؟", "من مواصفات ابن الزنا يكون جبان", "ابن الحلال دائمًا شجاع"),
-            EditableQuestion(10, "هل سبق أن بالغت في قصة لتبدو أكثر إثارة؟", "ابن الزنا دائمًا يهمبل", "عفية طلعت شريف"),
-            EditableQuestion(11, "هل تجد صعوبة في الاعتراف بخطئك؟", "ابن الزنا دائمًا ينكر أغلاطه", "شريف"),
-            EditableQuestion(12, "هل سبق أن أسأت فهم نية شخص قريب منك؟", "ابن الزنا دائمًا مستعجل", "شريف"),
-            EditableQuestion(13, "هل تتخذ قرارًا ثم تندم عليه بسرعة؟", "ابن زنا ما عليك عتب", "شريف أنت حبيبي"),
-            EditableQuestion(14, "هل تشجع برشلونة؟", "شريف والله", "أنت ابن زنا"),
-            EditableQuestion(15, "هل عشت طفولتك في منزل كان يجمع أشخاصًا تجمعهم مجرد مصلحة أو ستر فضيحة؟", "أنت ابن زنا", "الحمدلله شريف"),
-            EditableQuestion(16, "هل أنت ابن أخطائهم أم مجرد ضحية لقصة لم يُسمح لك بمعرفتها؟", "مبين أنت ابن زنا", "طلعت شريف"),
-            EditableQuestion(17, "هل تتصرف بثقة حتى عندما لا تكون متأكدًا؟", "أنت شريف", "أنت ابن زنا"),
-            EditableQuestion(18, "هل سبق أن غيّرت رأيك بسبب ضغط الآخرين؟", "بس ابن الزنا جبان", "الشريف دائمًا شجاع"),
-            EditableQuestion(19, "هل تشعر بالفضول تجاه أسرار العائلة القديمة؟", "أنتَ ابن زنا", "أنت شريف"),
-            EditableQuestion(20, "هل تستطيع الاحتفاظ بسر حتى لو كان من الصعب عليك ذلك؟", "أنت شريف كلش", "ابن زنا خربدينك")
-        )
+    fun `starter questionnaire has twenty complete entertainment questions`() {
         val questions = QuestionnaireEngine.starterQuestionnaire()
-        assertEquals(expected, questions)
         assertEquals(20, questions.size)
         assertTrue(questions.all { it.isConfigured })
+        assertTrue(questions.none {
+            (it.prompt + " " + it.yesConclusion + " " + it.noConclusion).contains("ابن زنا")
+        })
     }
 
     @Test
@@ -51,8 +31,26 @@ class QuestionnaireEngineTest {
 
         val migrated = QuestionnaireEngine.upgradeLegacyStarterRows(legacySaved)
         assertEquals(QuestionnaireEngine.starterQuestionnaire()[0], migrated[0])
-        assertEquals(legacySaved[1], migrated[1])
+        assertEquals(QuestionnaireEngine.starterQuestionnaire()[1].prompt, migrated[1].prompt)
+        assertEquals("نتيجة عدّلتها بنفسي", migrated[1].yesConclusion)
+        assertEquals(QuestionnaireEngine.starterQuestionnaire()[1].noConclusion, migrated[1].noConclusion)
         assertEquals(QuestionnaireEngine.starterQuestionnaire()[2], migrated[2])
+    }
+
+    @Test
+    fun `old unsupported starter conclusions upgrade without overwriting customized rows`() {
+        val oldClaims = listOf(
+            EditableQuestion(1, "هل تحب آرام؟", "أنت شريف جدًا.", "أنت أبن زنا من المستوى العاشر"),
+            EditableQuestion(2, "هل تحب سكولر؟", "كسمك أنت ابن زنا", "شريف والله")
+        )
+        val saved = QuestionnaireEngine.starterQuestionnaire().toMutableList()
+        saved[0] = oldClaims[0]
+        saved[1] = oldClaims[1].copy(noConclusion = "تعديل شخصي")
+        val migrated = QuestionnaireEngine.upgradeLegacyStarterRows(saved)
+        assertEquals(QuestionnaireEngine.starterQuestionnaire()[0], migrated[0])
+        assertEquals(QuestionnaireEngine.starterQuestionnaire()[1].prompt, migrated[1].prompt)
+        assertEquals(QuestionnaireEngine.starterQuestionnaire()[1].yesConclusion, migrated[1].yesConclusion)
+        assertEquals("تعديل شخصي", migrated[1].noConclusion)
     }
 
     @Test
@@ -70,6 +68,31 @@ class QuestionnaireEngineTest {
         assertEquals("النص عند نعم", QuestionnaireEngine.conclusionFor(question, true))
         assertEquals("النص عند لا", QuestionnaireEngine.conclusionFor(question, false))
         assertTrue(question.isConfigured)
+    }
+
+    @Test
+    fun `weighted questionnaire result is stable and uses question weights`() {
+        val questions = QuestionnaireEngine.starterQuestionnaire()
+        val allYes = questions.map { SubmittedAnswer(it, true) }
+        val allNo = questions.map { SubmittedAnswer(it, false) }
+
+        assertEquals(100, QuestionnaireEngine.calculateResult(allYes).percentage)
+        assertEquals(0, QuestionnaireEngine.calculateResult(allNo).percentage)
+        assertEquals("طابع تفاعلي مرتفع", QuestionnaireEngine.calculateResult(allYes).verdict)
+        assertEquals("طابع متحفظ", QuestionnaireEngine.calculateResult(allNo).verdict)
+        assertTrue(QuestionnaireEngine.weightForQuestion(1) != QuestionnaireEngine.weightForQuestion(3))
+        val oneHighWeightYes = allNo.toMutableList().also { it[0] = SubmittedAnswer(questions[0], true) }
+        val oneLowWeightYes = allNo.toMutableList().also { it[2] = SubmittedAnswer(questions[2], true) }
+        assertTrue(
+            QuestionnaireEngine.calculateResult(oneHighWeightYes).percentage >
+                QuestionnaireEngine.calculateResult(oneLowWeightYes).percentage
+        )
+    }
+
+    @Test
+    fun `empty answers produce a safe empty result`() {
+        assertEquals(0, QuestionnaireEngine.calculateResult(emptyList()).percentage)
+        assertEquals("لم تكتمل الإجابات", QuestionnaireEngine.calculateResult(emptyList()).verdict)
     }
 
     @Test

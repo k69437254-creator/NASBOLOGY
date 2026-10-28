@@ -7,11 +7,30 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.os.Environment
+import android.os.Build
+import java.io.File
+import java.io.FileOutputStream
+import android.provider.MediaStore
+import android.text.Layout
+import android.text.TextDirectionHeuristics
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.widget.Toast
 import android.net.Uri
 import android.os.Bundle
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -69,6 +88,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
+import java.security.MessageDigest
+import java.util.Locale
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
@@ -81,7 +102,7 @@ private val ColorPanel = Color(0xFF151020)
 private val ColorPurple = Color(0xFF9B5CFF)
 private val ColorPink = Color(0xFFFF4F91)
 private val ColorText = Color(0xFFF5F0FF)
-private val ColorMuted = Color(0xFFDCD4EA)
+private val ColorMuted = Color(0xFFD7CDE5)
 
 /** IBM Plex Sans Arabic fonts are downloaded by the app module's Gradle preBuild task. */
 private val IpmArabic = FontFamily(
@@ -165,7 +186,7 @@ private fun NasbologyApp() {
     val soundEnabled = prefs[booleanPreferencesKey("sound_enabled")] ?: true
     val saveHistory = prefs[booleanPreferencesKey("save_history")] ?: false
     var questions by remember { mutableStateOf(QuestionnaireEngine.starterQuestionnaire()) }
-    LaunchedEffect(Unit) { questions = QuestionnaireEngine.starterQuestionnaire() }
+    LaunchedEffect(Unit) { questions = loadQuestions(context.dataStore.data.first()) }
     var page by remember { mutableStateOf("welcome") }
     var showSettings by remember { mutableStateOf(false) }
     var quizQuestions by remember { mutableStateOf<List<EditableQuestion>>(emptyList()) }
@@ -176,6 +197,11 @@ private fun NasbologyApp() {
     var biometricFallbackMessage by remember { mutableStateOf("") }
     var biometricResult by remember { mutableStateOf("") }
     var biometricVerified by remember { mutableStateOf(false) }
+    var participantName by remember { mutableStateOf("") }
+    val faceResult = remember(biometricResult) {
+        if (biometricResult.contains("الغموض")) "ملامح سينمائية بطابع غامض"
+        else "ملامح سينمائية بطابع مشرق"
+    }
 
     val requestBiometric: () -> Unit = {
         biometricVerified = false
@@ -211,9 +237,9 @@ private fun NasbologyApp() {
                         }
                     )
                     val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                        .setTitle("نسبولوجي | التحقق بالبصمة")
-                        .setSubtitle("خطوة ترفيهية قبل الاختبار")
-                        .setDescription("التحقق يؤكد استخدام وسيلة بيومترية مسجلة على هذا الجهاز فقط، ولا يكشف النسب.")
+                        .setTitle("نسبولوجي | التحقق التمهيدي")
+                        .setSubtitle("ضع إصبعك لإكمال التجربة")
+                        .setDescription("استخدم وسيلة التحقق المسجلة على هاتفك للانتقال إلى الخطوة التالية.")
                         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
                         .setNegativeButtonText("إلغاء")
                         .build()
@@ -254,6 +280,8 @@ private fun NasbologyApp() {
             ) {
                 when (page) {
                     "welcome" -> WelcomeScreen(
+                        name = participantName,
+                        onNameChange = { participantName = it },
                         onReady = requestBiometric,
                         onDeveloper = { page = "developer" },
                         onEdit = { page = "editor" }
@@ -266,17 +294,17 @@ private fun NasbologyApp() {
                     "biometricScan" -> BiometricScanScreen(
                         onComplete = {
                             scope.launch {
-                                biometricResult = getOrCreateBiometricResult(context)
+                                biometricResult = getOrCreateBiometricResult(context, participantName)
                                 page = "biometricResult"
                             }
                         }
                     )
                     "biometricResult" -> BiometricResultScreen(
                         result = biometricResult,
-                        onContinue = { page = "face" },
-                        onDeveloper = { page = "developer" }
+                        onContinue = { page = "face" }
                     )
                     "face" -> CameraFaceScanScreen(
+                        faceResult = faceResult,
                         onContinue = {
                             quizQuestions = QuestionnaireEngine.configuredQuestions(questions)
                             questionIndex = 0
@@ -340,9 +368,11 @@ private fun NasbologyApp() {
                                 }
                                 if (saveHistory) {
                                     scope.launch {
-                                        val reportText = answers.joinToString("\n\n") { a ->
+                                        val finalScore = QuestionnaireEngine.calculateResult(answers)
+                                        val answersText = answers.joinToString("\n\n") { a ->
                                             "${a.question.prompt}\nالإجابة: ${if (a.answerIsYes) "نعم" else "لا"}\nالاستنتاج: ${a.conclusion}"
                                         }
+                                        val reportText = "النتيجة النهائية: ${finalScore.percentage}%\n${finalScore.verdict}\n\n$answersText"
                                         context.dataStore.edit { it[stringPreferencesKey("last_result")] = reportText }
                                     }
                                 }
@@ -351,24 +381,13 @@ private fun NasbologyApp() {
                         }
                     )
                     "result" -> ResultScreen(
+                        name = participantName,
                         answers = answers,
+                        biometricResult = biometricResult,
+                        faceResult = faceResult,
                         onAgain = { page = "home" },
-                        onShare = {
-                            val report = buildString {
-                                append("نسبولوجي | تقرير ترفيهي خيالي\n\n")
-                                answers.forEachIndexed { index, answer ->
-                                    append("${index + 1}. ${answer.question.prompt}\n")
-                                    append("الإجابة: ${if (answer.answerIsYes) "نعم" else "لا"}\n")
-                                    append("الاستنتاج: ${answer.conclusion}\n\n")
-                                }
-                                append("هذا التطبيق لا يكشف النسب الحقيقي ولا يقدم استنتاجات علمية.")
-                            }
-                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, report)
-                            }
-                            context.startActivity(android.content.Intent.createChooser(send, "مشاركة التقرير"))
-                        }
+                        onSaveReport = { saveReportImage(context, participantName, answers, biometricResult, faceResult) },
+                        onShareReport = { shareReportImage(context, participantName, answers, biometricResult, faceResult) }
                     )
                 }
                 if (showSettings) {
@@ -390,9 +409,7 @@ private fun NasbologyApp() {
                         onDismissRequest = { showBiometricFallback = false },
                         title = { Text("التحقق بالبصمة غير متاح") },
                         text = {
-                            Text(
-                                "$biometricFallbackMessage\n\nهذه خطوة ترفيهية فقط؛ التحقق بالبصمة لا يحدد النسب ولا يرسل بيانات البصمة إلى التطبيق."
-                            )
+                            Text(biometricFallbackMessage)
                         },
                         confirmButton = {
                             TextButton(onClick = { showBiometricFallback = false; page = "fingerprintReady" }) { Text("متابعة إلى الفحص") }
@@ -410,57 +427,110 @@ private fun NasbologyApp() {
     }
 }
 
-private val biometricResultKey = stringPreferencesKey("biometric_result_once_v2")
+private val legacyBiometricResultKey = stringPreferencesKey("biometric_result_once_v2")
 
 private val biometricResultOptions = listOf(
-    "اكتملت محاكاة واجهة البصمة. لم يُجرَ فحص DNA أو تحليل للنسب.",
-    "اكتمل العرض التمهيدي للبصمة؛ هذه الخطوة لا تنتج نتيجة علمية عن الأبوة أو النسب."
+    "نتيجة المحاكاة: ملفّك يحمل أجواء الغموض، والقصة ما زالت مفتوحة.",
+    "نتيجة المحاكاة: ملفّك يحمل أجواء التفاؤل، والقصة تحمل مفاجآت جميلة."
 )
 
-private suspend fun getOrCreateBiometricResult(context: Context): String {
+private fun biometricResultKeyFor(name: String) = run {
+    val normalizedName = name.trim().lowercase(Locale.ROOT).ifBlank { "guest" }
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(normalizedName.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    stringPreferencesKey("biometric_result_v3_$digest")
+}
+
+/** One locally persisted simulation outcome per entered name; no IP address or biometric data is collected. */
+private suspend fun getOrCreateBiometricResult(context: Context, name: String): String {
+    val key = biometricResultKeyFor(name)
     var chosen = biometricResultOptions.first()
     context.dataStore.edit { preferences ->
-        val existing = preferences[biometricResultKey]
+        val existing = preferences[key]
         if (existing != null) {
             chosen = existing
         } else {
-            chosen = biometricResultOptions[Random.nextInt(biometricResultOptions.size)]
-            preferences[biometricResultKey] = chosen
+            val legacy = preferences[legacyBiometricResultKey]
+            chosen = legacy ?: biometricResultOptions[Random.nextInt(biometricResultOptions.size)]
+            preferences[key] = chosen
+            if (legacy != null) preferences.remove(legacyBiometricResultKey)
         }
     }
     return chosen
 }
 
 @Composable
-private fun WelcomeScreen(onReady: () -> Unit, onDeveloper: () -> Unit, onEdit: () -> Unit) {
+private fun WelcomeScreen(
+    name: String,
+    onNameChange: (String) -> Unit,
+    onReady: () -> Unit,
+    onDeveloper: () -> Unit,
+    onEdit: () -> Unit
+) {
     ScreenFrame {
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(12.dp))
         Box(
-            Modifier.size(142.dp).background(
-                Brush.radialGradient(listOf(Color(0xFF512A8C), Color(0xFF170D28), Color.Transparent)), CircleShape
+            Modifier.size(154.dp).background(
+                Brush.radialGradient(listOf(Color(0xFF6C3CB2), Color(0xFF231333), Color.Transparent)), CircleShape
             ), contentAlignment = Alignment.Center
-        ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(94.dp)) }
+        ) {
+            Icon(Icons.Default.Science, null, tint = ColorPurple, modifier = Modifier.size(88.dp))
+        }
         BrandHeader()
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "مرحبًا بك في نسبولوجي. أجب عن الأسئلة العشرين وشاهد ملخصًا بصريًا لإجاباتك.",
-            fontSize = 19.sp,
-            lineHeight = 31.sp,
-            color = ColorText,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Medium
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xCC151020),
+            shape = RoundedCornerShape(22.dp),
+            border = BorderStroke(1.dp, Color(0xFF654198))
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Biotech, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("مختبر نسبولوجي", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+                Text(
+                    "مرحبًا بك في مختبر نسبولوجي الخاص بتجربة آرام أويال. خض جولة تفاعلية في عالم الأسئلة والمحاكاة، واكتشف كيف تتغير خلاصة تجربتك مع اختياراتك. هل أنت مستعد لأخذ جولة في مختبري؟",
+                    fontSize = 17.sp, lineHeight = 28.sp, color = ColorText, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Text("إذا كنت مستعدًا، اكتب اسمك هنا", color = ColorText, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("الاسم") },
+            placeholder = { Text("اكتب اسمك") },
+            leadingIcon = { Icon(Icons.Default.Person, null, tint = ColorPurple) },
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = ColorText, unfocusedTextColor = ColorText,
+                focusedBorderColor = ColorPurple, unfocusedBorderColor = Color(0xFF5A496E),
+                focusedLabelColor = ColorPurple, unfocusedLabelColor = ColorMuted,
+                cursorColor = ColorPurple
+            )
         )
-        Spacer(Modifier.height(6.dp))
         Button(
             onClick = onReady,
+            enabled = name.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(58.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)
         ) {
             Icon(Icons.Default.Fingerprint, null)
             Spacer(Modifier.width(10.dp))
-            Text("أنا جاهز", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("ابدأ الفحص", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
+        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.EditNote, null)
+            Spacer(Modifier.width(8.dp))
+            Text("تعديل الأسئلة")
+        }
+        Spacer(Modifier.height(4.dp))
         TextButton(onClick = onDeveloper) {
             Icon(Icons.Default.Code, null, tint = ColorMuted)
             Spacer(Modifier.width(7.dp))
@@ -472,35 +542,27 @@ private fun WelcomeScreen(onReady: () -> Unit, onDeveloper: () -> Unit, onEdit: 
 @Composable
 private fun FingerprintReadyScreen(isVerified: Boolean, onScan: () -> Unit, onBack: () -> Unit) {
     ScreenFrame {
-        TopBar("التحقق بالبصمة", onBack)
+        TopBar("التحقق التمهيدي", onBack)
         Box(
             Modifier.size(150.dp).background(
                 Brush.radialGradient(listOf(Color(0xFF48247D), Color(0xFF171022), Color.Transparent)), CircleShape
             ), contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(98.dp)) }
         Text(
-            if (isVerified) "تم التحقق من وسيلة البصمة المسجّلة على الهاتف."
-            else "يمكنك متابعة المحاكاة دون التحقق البيومتري.",
-            fontSize = 21.sp,
-            lineHeight = 32.sp,
-            color = ColorText,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
+            if (isVerified) "تم التحقق من بصمات إصبعك" else "يمكنك المتابعة إلى الخطوة التالية",
+            fontSize = 21.sp, lineHeight = 32.sp, color = ColorText,
+            textAlign = TextAlign.Center, fontWeight = FontWeight.Bold
         )
         Button(
             onClick = onScan,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(58.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)
         ) {
             Icon(Icons.Default.Fingerprint, null)
             Spacer(Modifier.width(9.dp))
-            Text("فحص بايومتري", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text("ابدأ مسح البصمة", fontWeight = FontWeight.Bold, fontSize = 17.sp)
         }
-        Text(
-            "التطبيق لا يقرأ قالب بصمتك ولا يستنتج منه النسب.",
-            color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 18.sp
-        )
     }
 }
 
@@ -514,55 +576,75 @@ private fun BiometricScanScreen(onComplete: () -> Unit) {
         label = "pulse"
     )
     LaunchedEffect(Unit) {
-        for (step in 1..20) {
-            scanPercent = step * 5
-            delay(130)
+        for (step in 1..25) {
+            scanPercent = step * 4
+            delay(100)
         }
         onComplete()
     }
     ScreenFrame {
-        Spacer(Modifier.height(42.dp))
+        Spacer(Modifier.height(34.dp))
         Box(
-            Modifier.size(176.dp).scale(pulse).background(
-                Brush.radialGradient(listOf(Color(0xFF5C2D91), Color(0xFF1A1028), Color.Transparent)), CircleShape
+            Modifier.size(190.dp).scale(pulse).background(
+                Brush.radialGradient(listOf(Color(0xFF7C45C8), Color(0xFF2A1740), Color.Transparent)), CircleShape
             ), contentAlignment = Alignment.Center
-        ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(112.dp)) }
-        Text("جارٍ الفحص البايومتري...", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        ) {
+            Surface(
+                modifier = Modifier.size(145.dp), color = Color(0xFF100B1A), shape = CircleShape,
+                border = BorderStroke(2.dp, ColorPurple)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(102.dp))
+                }
+            }
+        }
+        Text("مسح البصمة", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = ColorText)
         LinearProgressIndicator(
-            progress = { scanPercent / 100f },
-            modifier = Modifier.fillMaxWidth().height(7.dp),
-            color = ColorPurple,
-            trackColor = ColorPanel
+            progress = { scanPercent / 100f }, modifier = Modifier.fillMaxWidth().height(8.dp),
+            color = ColorPurple, trackColor = ColorPanel
         )
-        Text("$scanPercent%", color = ColorPurple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("يرجى الانتظار حتى اكتمال المؤثر البصري.", color = ColorMuted, textAlign = TextAlign.Center)
+        Text("$scanPercent%", color = ColorPurple, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Text("جارٍ التحليل", color = ColorText, textAlign = TextAlign.Center, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-private fun BiometricResultScreen(result: String, onContinue: () -> Unit, onDeveloper: () -> Unit) {
+private fun BiometricResultScreen(result: String, onContinue: () -> Unit) {
+    val isMysterious = result.contains("الغموض")
+    val pulse by rememberInfiniteTransition(label = "resultGlow").animateFloat(
+        initialValue = 0.96f, targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "resultPulse"
+    )
     ScreenFrame {
-        Spacer(Modifier.height(20.dp))
-        Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(66.dp))
-        Text("نتيجة الفحص البايومتري", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF1B1027),
-            shape = RoundedCornerShape(22.dp),
-            border = BorderStroke(1.dp, ColorPurple)
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier.size(112.dp).scale(pulse).background(
+                Brush.radialGradient(listOf(Color(0xFF6D3AB1), Color(0xFF20132F), Color.Transparent)), CircleShape
+            ), contentAlignment = Alignment.Center
         ) {
-            Text(result, modifier = Modifier.padding(20.dp), color = ColorText, fontSize = 19.sp, lineHeight = 30.sp, textAlign = TextAlign.Center)
+            Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(62.dp))
         }
-        Text(
-            "هذه محاكاة واجهة فقط؛ التحقق من بصمة الهاتف لا يفحص DNA ولا يحدد النسب.",
-            color = ColorMuted, fontSize = 12.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
-        )
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
+        Text("نتيجة التجربة", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
+        Surface(
+            modifier = Modifier.fillMaxWidth(), color = Color(0xFF1B1027), shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, if (isMysterious) ColorPink else ColorPurple)
+        ) {
+            Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(
+                    if (isMysterious) Icons.Default.AutoAwesome else Icons.Default.Stars,
+                    null, tint = if (isMysterious) ColorPink else ColorPurple, modifier = Modifier.size(40.dp)
+                )
+                Text(result, color = ColorText, fontSize = 20.sp, lineHeight = 31.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+            }
+        }
+        Button(
+            onClick = onContinue, modifier = Modifier.fillMaxWidth().height(58.dp),
+            shape = RoundedCornerShape(17.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)
+        ) {
             Icon(Icons.Default.Face, null)
             Spacer(Modifier.width(8.dp))
-            Text("الانتقال إلى فحص الوجه", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("الانتقال إلى مشهد الوجه", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-        TextButton(onClick = onDeveloper) { Text("صفحة المطوّر", color = ColorMuted) }
     }
 }
 
@@ -597,7 +679,7 @@ private fun DeveloperScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun CameraFaceScanScreen(onContinue: () -> Unit, onBack: () -> Unit) {
+private fun CameraFaceScanScreen(faceResult: String, onContinue: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var permissionGranted by remember {
@@ -626,8 +708,8 @@ private fun CameraFaceScanScreen(onContinue: () -> Unit, onBack: () -> Unit) {
     var scanComplete by remember { mutableStateOf(false) }
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
 
-    DisposableEffect(permissionGranted, lifecycleOwner, previewView) {
-        if (!permissionGranted) {
+    DisposableEffect(permissionGranted, scanComplete, lifecycleOwner, previewView) {
+        if (!permissionGranted || scanComplete) {
             onDispose { }
         } else {
             val executor = Executors.newSingleThreadExecutor()
@@ -680,69 +762,86 @@ private fun CameraFaceScanScreen(onContinue: () -> Unit, onBack: () -> Unit) {
     }
 
     ScreenFrame {
-        TopBar("فحص الوجه", onBack)
-        Text("ضع وجهك أمام الكاميرا", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        TopBar("مشهد الوجه", onBack)
+        Text("ضع وجهك أمام الكاميرا", fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = ColorText)
         if (permissionGranted) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(360.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = ColorPanel,
-                border = BorderStroke(1.dp, ColorPurple)
-            ) {
-                Box {
-                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                    Box(
-                        Modifier.align(Alignment.Center).size(210.dp, 260.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = Color.Transparent,
-                            shape = RoundedCornerShape(110.dp),
-                            border = BorderStroke(2.dp, if (faceDetected) Color(0xFF67E8A5) else ColorPurple)
-                        ) {}
-                    }
-                    Surface(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-                        color = Color(0xCC090711), shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            if (scanComplete) "اكتمل فحص الوجه" else "المسح جارٍ • $secondsLeft ثوانٍ",
-                            color = if (faceDetected) Color(0xFF8FF0B7) else ColorText,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                            fontWeight = FontWeight.Bold
+            if (!scanComplete) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(360.dp), shape = RoundedCornerShape(26.dp),
+                    color = ColorPanel, border = BorderStroke(1.dp, ColorPurple)
+                ) {
+                    Box {
+                        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                        val scanLineProgress by rememberInfiniteTransition(label = "faceScanLine").animateFloat(
+                            initialValue = -1f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse),
+                            label = "faceScanLineProgress"
                         )
+                        Box(Modifier.align(Alignment.Center).size(210.dp, 260.dp), contentAlignment = Alignment.Center) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(), color = Color.Transparent,
+                                shape = RoundedCornerShape(110.dp),
+                                border = BorderStroke(2.dp, if (faceDetected) Color(0xFF67E8A5) else ColorPurple)
+                            ) {}
+                            Box(
+                                modifier = Modifier
+                                    .width(176.dp)
+                                    .height(2.dp)
+                                    .offset(y = (scanLineProgress * 112f).dp)
+                                    .background(Color(0xFFB99AFF), RoundedCornerShape(2.dp))
+                            )
+                        }
+                        Surface(
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                            color = Color(0xCC090711), shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                "المسح جارٍ • $secondsLeft ثوانٍ", color = if (faceDetected) Color(0xFF8FF0B7) else ColorText,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-            }
-            Text(
-                when {
-                    scanComplete && faceDetected -> "تم رصد وجه أمام الكاميرا. لم تُلتقط صورة ولم تُحفظ بيانات الوجه."
-                    scanComplete -> "انتهت مدة المسح، لكن لم يتم رصد وجه واضح. يمكنك المتابعة أو إعادة فتح الفحص."
-                    faceDetected -> "تم رصد وجه؛ يستمر المسح حتى إكمال الثواني الثماني."
-                    else -> "سيعمل العرض المباشر لمدة 8 ثوانٍ. لا تُحفظ الصور في التطبيق."
-                },
-                color = ColorMuted, fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center
-            )
-            if (cameraError != null) Text(cameraError!!, color = ColorPink, fontSize = 12.sp, textAlign = TextAlign.Center)
-            Button(
-                onClick = onContinue,
-                enabled = scanComplete,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ColorPurple, disabledContainerColor = Color(0xFF3B2B50))
-            ) {
-                Text(if (scanComplete) "متابعة إلى الأسئلة" else "يرجى إكمال المسح", fontWeight = FontWeight.Bold)
+                if (cameraError != null) Text(cameraError!!, color = ColorPink, fontSize = 12.sp, textAlign = TextAlign.Center)
+            } else {
+                val pulse by rememberInfiniteTransition(label = "faceResultGlow").animateFloat(
+                    initialValue = 0.96f, targetValue = 1.04f,
+                    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "faceResultPulse"
+                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
+                    shape = RoundedCornerShape(26.dp), border = BorderStroke(1.dp, ColorPurple)
+                ) {
+                    Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Box(
+                            Modifier.size(128.dp).scale(pulse).background(
+                                Brush.radialGradient(listOf(Color(0xFF7043A8), Color(0xFF20142E), Color.Transparent)), CircleShape
+                            ), contentAlignment = Alignment.Center
+                        ) { Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(68.dp)) }
+                        Text("اكتمل المشهد", fontSize = 22.sp, color = ColorText, fontWeight = FontWeight.Bold)
+                        Text(faceResult, fontSize = 21.sp, color = ColorText, lineHeight = 31.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Button(
+                    onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorPurple), shape = RoundedCornerShape(17.dp)
+                ) {
+                    Icon(Icons.Default.Psychology, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("الانتقال إلى جلسة المستشار النفسي", fontWeight = FontWeight.Bold)
+                }
             }
         } else {
             Icon(Icons.Default.CameraAlt, null, tint = ColorPurple, modifier = Modifier.size(58.dp))
             Text(
-                if (permissionDenied) "يحتاج فحص الوجه إلى إذن الكاميرا. لم يتم التقاط أو تخزين أي صورة." else "بانتظار إذن الكاميرا…",
+                if (permissionDenied) "إذن الكاميرا مطلوب لعرض مشهد الوجه." else "بانتظار إذن الكاميرا…",
                 color = ColorMuted, textAlign = TextAlign.Center, lineHeight = 22.sp
             )
             Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
                 Text("السماح باستخدام الكاميرا")
             }
-            OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("متابعة بدون فحص الوجه") }
+            OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) { Text("متابعة إلى جلسة المستشار النفسي") }
         }
     }
 }
@@ -769,23 +868,7 @@ private fun BrandHeader() {
     }
 }
 
-@Composable
-private fun Disclaimer() {
-    Surface(
-        color = Color(0xFF21152D),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, Color(0xFF51346E))
-    ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-            Icon(Icons.Default.Info, null, tint = ColorPink, modifier = Modifier.size(19.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "هذا الملخص يحصي الكلمات في النصوص المحددة فقط؛ لا يكشف النسب ولا يثبت الأبوة.",
-                color = ColorMuted, fontSize = 12.sp, lineHeight = 18.sp
-            )
-        }
-    }
-}
+
 
 @Composable
 private fun HomeScreen(
@@ -806,32 +889,26 @@ private fun HomeScreen(
             ), contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(92.dp)) }
         BrandHeader()
-        Text("اختبارك يبدأ الآن", color = ColorPink, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text(
-            "أجب عن الأسئلة العشرين وشاهد ملخصًا بصريًا للكلمات الواردة في الاستنتاجات.",
-            color = ColorMuted, textAlign = TextAlign.Center, lineHeight = 23.sp
+            "مرحبًا بك في نسبولوجي؛ خض تجربة تفاعلية تتكوّن من مشاهد محاكاة وأسئلة واختيارات، ثم شاهد نتيجتك النهائية في تقرير واحد.",
+            color = ColorText, fontSize = 17.sp, textAlign = TextAlign.Center, lineHeight = 28.sp
         )
-        Surface(color = ColorPanel, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Color(0xFF51346E))) {
-            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.EditNote, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text("الأسئلة المُعدّة", fontWeight = FontWeight.Bold)
-                    Text("$configuredCount من ${QuestionnaireEngine.SLOT_COUNT} سؤالًا مكتملًا", color = ColorMuted, fontSize = 12.sp)
-                }
-            }
-        }
         Button(
-            onClick = onStart,
-            enabled = configuredCount > 0,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(18.dp),
+            onClick = onStart, enabled = configuredCount > 0,
+            modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)
         ) {
             Icon(Icons.Default.Science, null)
             Spacer(Modifier.width(10.dp))
-            Text("ابدأ الاختبار", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("ابدأ الفحص", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
+        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Icons.Default.Edit, null)
+            Spacer(Modifier.width(8.dp))
+            Text("إضافة الأسئلة وتعديل الاستنتاجات")
+        }
+        if (configuredCount == 0) Text("لا توجد أسئلة مكتملة", color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
         OutlinedButton(onClick = onDeveloper, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Code, null)
             Spacer(Modifier.width(8.dp))
@@ -934,24 +1011,39 @@ private fun QuestionScreen(
 ) {
     val question = questions[index]
     ScreenFrame {
-        TopBar("الاختبار", onBack)
-        Text("السؤال ${index + 1} من ${questions.size}", color = ColorPurple, fontWeight = FontWeight.Bold)
-        LinearProgressIndicator(
-            progress = { (index + 1f) / questions.size },
-            modifier = Modifier.fillMaxWidth(), color = ColorPurple, trackColor = ColorPanel
-        )
-        Text(question.prompt, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 31.sp)
-        listOf(true to "نعم", false to "لا").forEach { (answer, label) ->
+        TopBar("جلسة المستشار النفسي", onBack)
+        Surface(
+            modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
+            shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color(0xFF634391))
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Psychology, null, tint = ColorPurple, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Text("الحوار ${index + 1} من ${questions.size}", color = ColorPurple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+                LinearProgressIndicator(
+                    progress = { (index + 1f) / questions.size }, modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = ColorPurple, trackColor = Color(0xFF362844)
+                )
+                Text(question.prompt, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 33.sp, color = ColorText)
+            }
+        }
+        listOf(true to "نعم، هذا ينطبق عليّ" to ColorPurple, false to "لا، هذا لا ينطبق عليّ" to ColorPink).forEach { triple ->
+            val answer = triple.first.first
+            val label = triple.first.second
+            val accent = triple.second
             Surface(
                 modifier = Modifier.fillMaxWidth().clickable { onAnswer(answer) },
-                color = ColorPanel,
-                shape = RoundedCornerShape(15.dp),
-                border = BorderStroke(1.dp, if (answer) ColorPurple else ColorPink)
+                color = Color(0xFF151020), shape = RoundedCornerShape(17.dp),
+                border = BorderStroke(1.dp, accent)
             ) {
-                Row(Modifier.padding(19.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (answer) Icons.Default.CheckCircle else Icons.Default.Cancel, null, tint = if (answer) ColorPurple else ColorPink)
-                    Spacer(Modifier.width(12.dp))
-                    Text(label, color = ColorText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 21.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (answer) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, tint = accent, modifier = Modifier.size(26.dp))
+                    Spacer(Modifier.width(13.dp))
+                    Text(label, color = ColorText, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Default.ArrowBackIosNew, null, tint = ColorMuted, modifier = Modifier.size(17.dp))
                 }
             }
         }
@@ -961,18 +1053,29 @@ private fun QuestionScreen(
 @Composable
 private fun ConclusionScreen(index: Int, total: Int, conclusion: String, onContinue: () -> Unit) {
     ScreenFrame {
-        Spacer(Modifier.height(35.dp))
-        Icon(Icons.Default.Article, null, tint = ColorPurple, modifier = Modifier.size(64.dp))
-        Text("الاستنتاج المحدد لهذا الجواب", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
         Surface(
-            modifier = Modifier.fillMaxWidth(), color = Color(0xFF1B1027),
-            shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, ColorPurple)
+            modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
+            shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, Color(0xFF634391))
         ) {
-            Text(conclusion, color = ColorText, fontSize = 19.sp, lineHeight = 28.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(22.dp))
+            Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                Icon(Icons.Default.PsychologyAlt, null, tint = ColorPurple, modifier = Modifier.size(58.dp))
+                Text("خلاصة الجلسة", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
+                LinearProgressIndicator(
+                    progress = { (index + 1f) / total.coerceAtLeast(1) }, modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = ColorPurple, trackColor = Color(0xFF362844)
+                )
+                Text("المحور ${index + 1} من $total", color = ColorPurple, fontWeight = FontWeight.Bold)
+                Text(conclusion, color = ColorText, fontSize = 19.sp, lineHeight = 30.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+            }
         }
-        Text("هذا النص كتبتموه أنتم، وليس نتيجة علمية.", color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(54.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
-            Text(if (index < total - 1) "السؤال التالي" else "عرض التقرير الكامل")
+        Button(
+            onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ColorPurple), shape = RoundedCornerShape(17.dp)
+        ) {
+            Icon(Icons.Default.ArrowForward, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (index < total - 1) "متابعة الحوار" else "عرض الملخص النهائي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 }
@@ -989,106 +1092,271 @@ private fun EmptyQuestionsScreen(onEdit: () -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ResultScreen(answers: List<SubmittedAnswer>, onAgain: () -> Unit, onShare: () -> Unit) {
-    val flaggedCount = answers.count { it.conclusion.contains("زنا") }
-    val otherCount = answers.size - flaggedCount
-    val total = answers.size.coerceAtLeast(1)
-    val flaggedPercent = (flaggedCount * 100) / total
-    val otherPercent = (otherCount * 100) / total
-    val visualStyle = remember { listOf("إضاءة هادئة", "إضاءة سينمائية").random() }
+private fun ResultScreen(
+    name: String,
+    answers: List<SubmittedAnswer>,
+    biometricResult: String,
+    faceResult: String,
+    onAgain: () -> Unit,
+    onSaveReport: () -> Unit,
+    onShareReport: () -> Unit
+) {
+    val analysis = remember(answers) { QuestionnaireEngine.calculateResult(answers) }
+    val percent = analysis.percentage
+    val verdict = analysis.verdict
+    var fingerprintExpanded by remember { mutableStateOf(false) }
+    var faceExpanded by remember { mutableStateOf(false) }
+
     ScreenFrame {
-        TopBar("التقرير النهائي", onBack = onAgain)
-        Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(64.dp))
-        Text("تقرير الإجابات والاستنتاجات", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Text("${answers.size} استنتاجًا حسب الإجابات المختارة", color = ColorMuted, textAlign = TextAlign.Center)
+        TopBar("تقرير المستشار النفسي", onBack = onAgain)
+        Box(
+            Modifier.size(110.dp).background(
+                Brush.radialGradient(listOf(Color(0xFF6339A1), Color(0xFF20132F), Color.Transparent)), CircleShape
+            ), contentAlignment = Alignment.Center
+        ) { Icon(Icons.Default.Psychology, null, tint = ColorPurple, modifier = Modifier.size(65.dp)) }
+        Text("تقرير المستشار النفسي", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ColorText, textAlign = TextAlign.Center)
         Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF191226),
-            shape = RoundedCornerShape(22.dp),
-            border = BorderStroke(1.dp, Color(0xFF6B49A3))
+            modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
+            shape = RoundedCornerShape(26.dp), border = BorderStroke(1.dp, ColorPurple)
         ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(27.dp))
-                    Spacer(Modifier.width(9.dp))
-                    Text("مؤشر لغوي للإجابات", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-                Text("استنتاجات تتضمن كلمة «زنا»", color = ColorMuted, fontSize = 14.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LinearProgressIndicator(
-                        progress = { flaggedPercent / 100f },
-                        modifier = Modifier.weight(1f).height(8.dp),
-                        color = ColorPink,
-                        trackColor = Color(0xFF35263E)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text("$flaggedPercent%", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-                Text("$flaggedCount من ${answers.size} إجابة", color = ColorText, fontSize = 13.sp)
-                HorizontalDivider(color = Color(0xFF35263E))
-                Text("استنتاجات لا تتضمن الكلمة", color = ColorMuted, fontSize = 14.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LinearProgressIndicator(
-                        progress = { otherPercent / 100f },
-                        modifier = Modifier.weight(1f).height(8.dp),
-                        color = Color(0xFF7BD6AC),
-                        trackColor = Color(0xFF35263E)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text("$otherPercent%", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-                Text("$otherCount من ${answers.size} إجابة", color = ColorText, fontSize = 13.sp)
-                HorizontalDivider(color = Color(0xFF35263E))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
-                    Spacer(Modifier.width(9.dp))
-                    Column {
-                        Text("مؤشر البصمة", color = ColorText, fontWeight = FontWeight.Bold)
-                        Text("عرض واجهة فقط — لا توجد قراءة للنسب", color = ColorMuted, fontSize = 12.sp)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
-                    Spacer(Modifier.width(9.dp))
-                    Column {
-                        Text("الوصف البصري", color = ColorText, fontWeight = FontWeight.Bold)
-                        Text("$visualStyle • اختيار عشوائي غير مستنتج من الوجه", color = ColorMuted, fontSize = 12.sp)
-                    }
-                }
-                Text(
-                    "النسب المئوية تصف الكلمات الموجودة في الاستنتاجات المحددة فقط، ولا تعني نسبة شرعية أو زنا.",
-                    color = ColorText, fontSize = 13.sp, lineHeight = 20.sp
+            Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                Text("$percent%", color = ColorText, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                LinearProgressIndicator(
+                    progress = { percent / 100f }, modifier = Modifier.fillMaxWidth().height(9.dp),
+                    color = ColorPurple, trackColor = Color(0xFF35263E)
+                )
+                Text(verdict, color = ColorText, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 27.sp)
+                Text("التقرير الشخصي لـ ${name.ifBlank { "زائر نسبولوجي" }}", color = ColorMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+            }
+        }
+        ResultDetailAccordion(
+            title = "نتيجة مشهد البصمة", detail = biometricResult,
+            icon = { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(30.dp)) },
+            expanded = fingerprintExpanded, onToggle = { fingerprintExpanded = !fingerprintExpanded }
+        )
+        ResultDetailAccordion(
+            title = "نتيجة مشهد الوجه", detail = faceResult,
+            icon = { Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(30.dp)) },
+            expanded = faceExpanded, onToggle = { faceExpanded = !faceExpanded }
+        )
+        Button(
+            onClick = onSaveReport, modifier = Modifier.fillMaxWidth().height(54.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ColorPurple), shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(Icons.Default.Download, null)
+            Spacer(Modifier.width(8.dp))
+            Text("حفظ التقرير كصورة", fontWeight = FontWeight.Bold)
+        }
+        OutlinedButton(onClick = onShareReport, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Icons.Default.Share, null, tint = ColorText)
+            Spacer(Modifier.width(8.dp))
+            Text("مشاركة التقرير المصوّر", color = ColorText, fontWeight = FontWeight.Bold)
+        }
+        OutlinedButton(onClick = onAgain, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Icons.Default.Refresh, null, tint = ColorText)
+            Spacer(Modifier.width(8.dp))
+            Text("العودة إلى القائمة الرئيسية", color = ColorText, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun ResultDetailAccordion(
+    title: String,
+    detail: String,
+    icon: @Composable () -> Unit,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(), color = Color(0xFF171020),
+        shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, Color(0xFF634391))
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                icon()
+                Spacer(Modifier.width(12.dp))
+                Text(title, color = ColorText, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "إخفاء التفاصيل" else "عرض التفاصيل",
+                    tint = ColorPurple, modifier = Modifier.size(28.dp)
                 )
             }
-        }
-        answers.forEachIndexed { index, answer ->
-            Surface(
-                modifier = Modifier.fillMaxWidth(), color = ColorPanel,
-                shape = RoundedCornerShape(17.dp), border = BorderStroke(1.dp, Color(0xFF51346E))
+            androidx.compose.animation.AnimatedVisibility(
+                visible = expanded,
+                enter = androidx.compose.animation.expandVertically(tween(280)) + androidx.compose.animation.fadeIn(tween(220)),
+                exit = androidx.compose.animation.shrinkVertically(tween(220)) + androidx.compose.animation.fadeOut(tween(160))
             ) {
-                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${index + 1}. ${answer.question.prompt}", color = ColorText, fontWeight = FontWeight.Bold, lineHeight = 23.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("الإجابة: ", color = ColorMuted, fontSize = 13.sp)
-                        Text(if (answer.answerIsYes) "نعم" else "لا", color = if (answer.answerIsYes) Color(0xFFB9F6CA) else ColorPink, fontWeight = FontWeight.Bold)
-                    }
-                    HorizontalDivider(color = Color(0xFF342740))
-                    Text("الاستنتاج", color = ColorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text(answer.conclusion, color = ColorText, lineHeight = 23.sp)
+                Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 18.dp)) {
+                    HorizontalDivider(color = Color(0xFF49345F))
+                    Spacer(Modifier.height(12.dp))
+                    Text(detail, color = ColorMuted, fontSize = 14.sp, lineHeight = 23.sp)
                 }
             }
         }
-        Disclaimer()
-        Button(onClick = onShare, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
-            Icon(Icons.Default.Share, null)
-            Spacer(Modifier.width(8.dp))
-            Text("مشاركة التقرير")
+    }
+}
+
+private data class ReportTextBlock(val text: String, val size: Float, val color: Int, val bold: Boolean, val gap: Int = 24)
+
+private fun createReportBitmap(
+    name: String,
+    answers: List<SubmittedAnswer>,
+    biometricResult: String,
+    faceResult: String
+): Bitmap {
+    val width = 1080
+    val padding = 74
+    val contentWidth = width - padding * 2
+    // A paper-like report canvas with dark ink and restrained violet headings.
+    val white = android.graphics.Color.rgb(39, 29, 52)
+    val muted = android.graphics.Color.rgb(103, 91, 119)
+    val lilac = android.graphics.Color.rgb(105, 61, 158)
+    val blocks = mutableListOf<ReportTextBlock>()
+    blocks += ReportTextBlock("تقرير المستشار النفسي", 48f, lilac, true, 18)
+    blocks += ReportTextBlock("NASBOLOGY  •  ملف التجربة", 25f, muted, true, 36)
+    blocks += ReportTextBlock(
+        "مرحبًا عزيزي ${name.ifBlank { "زائر نسبولوجي" }}، هذا التقرير النهائي والكامل لتجربتك الترفيهية في نسبولوجي؛ يجمع نتيجة الاستنتاج من اختياراتك ونتيجتي مشهدَي المحاكاة في ملف واحد.",
+        30f, white, false, 34
+    )
+    val analysis = QuestionnaireEngine.calculateResult(answers)
+    val percent = analysis.percentage
+    val verdict = analysis.verdict
+    blocks += ReportTextBlock("النتيجة النهائية", 34f, lilac, true, 14)
+    blocks += ReportTextBlock("$percent%\n$verdict", 31f, white, true, 30)
+    blocks += ReportTextBlock("نتيجة مشهد البصمة", 29f, lilac, true, 10)
+    blocks += ReportTextBlock(biometricResult, 27f, white, false, 26)
+    blocks += ReportTextBlock("نتيجة مشهد الوجه", 29f, lilac, true, 10)
+    blocks += ReportTextBlock(faceResult, 27f, white, false, 30)
+    blocks += ReportTextBlock("تفاصيل الجلسة", 34f, lilac, true, 16)
+    answers.forEachIndexed { index, answer ->
+        blocks += ReportTextBlock("${index + 1}. ${answer.question.prompt}", 26f, white, true, 8)
+        blocks += ReportTextBlock("الإجابة المختارة: ${if (answer.answerIsYes) "نعم" else "لا"}", 24f, muted, false, 8)
+        blocks += ReportTextBlock("الخلاصة: ${answer.conclusion}", 24f, white, false, 25)
+    }
+    blocks += ReportTextBlock("Aram Aoyal", 32f, lilac, true, 8)
+    blocks += ReportTextBlock("معدّ التجربة", 22f, muted, false, 24)
+
+    fun layoutFor(block: ReportTextBlock): StaticLayout {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = block.color
+            textSize = block.size
+            typeface = Typeface.create("sans-serif", if (block.bold) Typeface.BOLD else Typeface.NORMAL)
         }
-        OutlinedButton(onClick = onAgain, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.Refresh, null)
-            Spacer(Modifier.width(8.dp))
-            Text("العودة للرئيسية")
+        return StaticLayout.Builder.obtain(block.text, 0, block.text.length, paint, contentWidth)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setTextDirection(TextDirectionHeuristics.RTL)
+            .setIncludePad(true)
+            .setLineSpacing(8f, 1.05f)
+            .build()
+    }
+    val layouts = blocks.map { layoutFor(it) }
+    val top = 150
+    val bottom = 100
+    val contentHeight = layouts.indices.sumOf { layouts[it].height + blocks[it].gap }
+    val height = (top + contentHeight + bottom).coerceAtLeast(1600)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(),
+            intArrayOf(android.graphics.Color.rgb(255, 253, 250), android.graphics.Color.rgb(248, 244, 252), android.graphics.Color.rgb(255, 255, 255)),
+            null, Shader.TileMode.CLAMP)
+    }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), background)
+    val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(90, 129, 93, 164)
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+    }
+    canvas.drawRoundRect(RectF(26f, 26f, width - 26f, height - 26f), 38f, 38f, cardPaint)
+    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = lilac; strokeWidth = 5f }
+    canvas.drawLine(padding.toFloat(), 100f, (width - padding).toFloat(), 100f, accentPaint)
+    var y = top.toFloat()
+    layouts.forEachIndexed { index, layout ->
+        canvas.save()
+        canvas.translate(padding.toFloat(), y)
+        layout.draw(canvas)
+        canvas.restore()
+        y += layout.height + blocks[index].gap
+    }
+    return bitmap
+}
+
+private fun storeReportBitmap(context: Context, bitmap: Bitmap): Uri? {
+    val fileName = "Nasbology_Report_${System.currentTimeMillis()}.png"
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        val baseDirectory = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
+        val directory = File(baseDirectory, "Nasbology")
+        if (!directory.exists() && !directory.mkdirs()) throw IllegalStateException("تعذر إنشاء مجلد التقرير")
+        val file = File(directory, fileName)
+        FileOutputStream(file).use { output ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw IllegalStateException("تعذر حفظ الصورة")
         }
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Nasbology")
+        put(MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+    return try {
+        resolver.openOutputStream(uri)?.use { output ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw IllegalStateException("تعذر حفظ الصورة")
+        } ?: throw IllegalStateException("تعذر فتح ملف الصورة")
+        val ready = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+        resolver.update(uri, ready, null, null)
+        uri
+    } catch (error: Exception) {
+        runCatching { resolver.delete(uri, null, null) }
+        throw error
+    }
+}
+
+private fun saveReportImage(
+    context: Context,
+    name: String,
+    answers: List<SubmittedAnswer>,
+    biometricResult: String,
+    faceResult: String
+) {
+    try {
+        val bitmap = createReportBitmap(name, answers, biometricResult, faceResult)
+        storeReportBitmap(context, bitmap) ?: throw IllegalStateException("تعذر إنشاء صورة التقرير")
+        bitmap.recycle()
+        Toast.makeText(context, "تم حفظ صورة التقرير في مجلد الصور/Nasbology", Toast.LENGTH_LONG).show()
+    } catch (_: Exception) {
+        Toast.makeText(context, "تعذر حفظ صورة التقرير", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun shareReportImage(
+    context: Context,
+    name: String,
+    answers: List<SubmittedAnswer>,
+    biometricResult: String,
+    faceResult: String
+) {
+    try {
+        val bitmap = createReportBitmap(name, answers, biometricResult, faceResult)
+        val uri = storeReportBitmap(context, bitmap)
+        bitmap.recycle()
+        if (uri == null) throw IllegalStateException("تعذر إنشاء صورة التقرير")
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = android.content.ClipData.newUri(context.contentResolver, "تقرير نسبولوجي", uri)
+        }
+        context.startActivity(android.content.Intent.createChooser(send, "مشاركة التقرير المصوّر"))
+    } catch (_: Exception) {
+        Toast.makeText(context, "تعذرت مشاركة صورة التقرير", Toast.LENGTH_LONG).show()
     }
 }
 

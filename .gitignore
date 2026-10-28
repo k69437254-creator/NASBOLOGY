@@ -5,3 +5,7 @@ local.properties
 *.iml
 .DS_Store
 app/build.gradle.kts.backup
+n#app/src/main/java/com/aram/nasbology/MainActivity.kt.backup-20261028-060923
+build-log.txt
+nasbology_ui_update.py
+app/src/main/java/com/aram/nasbology/MainActivity.kt.backup-20261028-060923

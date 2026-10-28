@@ -81,7 +81,7 @@ private val ColorPanel = Color(0xFF151020)
 private val ColorPurple = Color(0xFF9B5CFF)
 private val ColorPink = Color(0xFFFF4F91)
 private val ColorText = Color(0xFFF5F0FF)
-private val ColorMuted = Color(0xFFB8ADC9)
+private val ColorMuted = Color(0xFFDCD4EA)
 
 /** IBM Plex Sans Arabic fonts are downloaded by the app module's Gradle preBuild task. */
 private val IpmArabic = FontFamily(
@@ -165,7 +165,7 @@ private fun NasbologyApp() {
     val soundEnabled = prefs[booleanPreferencesKey("sound_enabled")] ?: true
     val saveHistory = prefs[booleanPreferencesKey("save_history")] ?: false
     var questions by remember { mutableStateOf(QuestionnaireEngine.starterQuestionnaire()) }
-    LaunchedEffect(Unit) { questions = loadQuestions(context.dataStore.data.first()) }
+    LaunchedEffect(Unit) { questions = QuestionnaireEngine.starterQuestionnaire() }
     var page by remember { mutableStateOf("welcome") }
     var showSettings by remember { mutableStateOf(false) }
     var quizQuestions by remember { mutableStateOf<List<EditableQuestion>>(emptyList()) }
@@ -410,11 +410,11 @@ private fun NasbologyApp() {
     }
 }
 
-private val biometricResultKey = stringPreferencesKey("biometric_result_once")
+private val biometricResultKey = stringPreferencesKey("biometric_result_once_v2")
 
 private val biometricResultOptions = listOf(
-    "لقد تم الفحص بنجاح، يؤسفنا اخبارك أن بعد تحليل بصمة اصبعك بدقة لقد اكتشفنا أنك لست ابنًا شرعيًا، للأسف أنت ابن زنا.",
-    "لقد تم فحص بصمتك بنجاح، وفقًا لتحليل بصمة الأصبع لقد اكتشفنا أنك ابن شرعي ولست ابن زنا .. تهانينا لك."
+    "اكتملت محاكاة واجهة البصمة. لم يُجرَ فحص DNA أو تحليل للنسب.",
+    "اكتمل العرض التمهيدي للبصمة؛ هذه الخطوة لا تنتج نتيجة علمية عن الأبوة أو النسب."
 )
 
 private suspend fun getOrCreateBiometricResult(context: Context): String {
@@ -443,7 +443,7 @@ private fun WelcomeScreen(onReady: () -> Unit, onDeveloper: () -> Unit, onEdit: 
         BrandHeader()
         Spacer(Modifier.height(8.dp))
         Text(
-            "مرحبًا بك في تطبيق نسبولوجي، هذا التطبيق سوف يكشف عبر الفحوصات ويُحدد هل أنت ابن زنا أم ابن شرعي، وفقًا للبيانات التي ستتم استخراجها، هل أنت جاهز لبدأ الاختبار ؟",
+            "مرحبًا بك في نسبولوجي. أجب عن الأسئلة العشرين وشاهد ملخصًا بصريًا لإجاباتك.",
             fontSize = 19.sp,
             lineHeight = 31.sp,
             color = ColorText,
@@ -460,11 +460,6 @@ private fun WelcomeScreen(onReady: () -> Unit, onDeveloper: () -> Unit, onEdit: 
             Icon(Icons.Default.Fingerprint, null)
             Spacer(Modifier.width(10.dp))
             Text("أنا جاهز", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.EditNote, null)
-            Spacer(Modifier.width(8.dp))
-            Text("تعديل الأسئلة")
         }
         TextButton(onClick = onDeveloper) {
             Icon(Icons.Default.Code, null, tint = ColorMuted)
@@ -484,8 +479,8 @@ private fun FingerprintReadyScreen(isVerified: Boolean, onScan: () -> Unit, onBa
             ), contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(98.dp)) }
         Text(
-            if (isVerified) "تم أخذ بصمة أصبعك لتحليل نسبك واكتشاف هل أنت ابن زنا أم لا."
-            else "لم يكتمل التحقق البيومتري على هذا الجهاز. يمكنك متابعة الفحص الترفيهي دون التحقق.",
+            if (isVerified) "تم التحقق من وسيلة البصمة المسجّلة على الهاتف."
+            else "يمكنك متابعة المحاكاة دون التحقق البيومتري.",
             fontSize = 21.sp,
             lineHeight = 32.sp,
             color = ColorText,
@@ -503,7 +498,7 @@ private fun FingerprintReadyScreen(isVerified: Boolean, onScan: () -> Unit, onBa
             Text("فحص بايومتري", fontWeight = FontWeight.Bold, fontSize = 17.sp)
         }
         Text(
-            "الفحص البايومتري هنا خطوة واجهة ترفيهية؛ لا يقرأ التطبيق بيانات البصمة ولا يخزنها.",
+            "التطبيق لا يقرأ قالب بصمتك ولا يستنتج منه النسب.",
             color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 18.sp
         )
     }
@@ -559,7 +554,7 @@ private fun BiometricResultScreen(result: String, onContinue: () -> Unit, onDeve
             Text(result, modifier = Modifier.padding(20.dp), color = ColorText, fontSize = 19.sp, lineHeight = 30.sp, textAlign = TextAlign.Center)
         }
         Text(
-            "هذه النتيجة اختيار ترفيهي عشوائي محفوظ على هذا الجهاز؛ البصمة والوجه لا يحددان النسب أو الأبوة علميًا.",
+            "هذه محاكاة واجهة فقط؛ التحقق من بصمة الهاتف لا يفحص DNA ولا يحدد النسب.",
             color = ColorMuted, fontSize = 12.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
         )
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPurple)) {
@@ -785,7 +780,7 @@ private fun Disclaimer() {
             Icon(Icons.Default.Info, null, tint = ColorPink, modifier = Modifier.size(19.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "محاكاة ترفيهية فقط. الصور والإجابات لا تكشف النسب ولا تحدد حقيقة عن أي شخص.",
+                "هذا الملخص يحصي الكلمات في النصوص المحددة فقط؛ لا يكشف النسب ولا يثبت الأبوة.",
                 color = ColorMuted, fontSize = 12.sp, lineHeight = 18.sp
             )
         }
@@ -813,7 +808,7 @@ private fun HomeScreen(
         BrandHeader()
         Text("اختبارك يبدأ الآن", color = ColorPink, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text(
-            "أسئلة واختيارات ونتائج بأسلوب ترفيهي. يمكنك تعديل الأسئلة والاستنتاجات من داخل التطبيق.",
+            "أجب عن الأسئلة العشرين وشاهد ملخصًا بصريًا للكلمات الواردة في الاستنتاجات.",
             color = ColorMuted, textAlign = TextAlign.Center, lineHeight = 23.sp
         )
         Surface(color = ColorPanel, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Color(0xFF51346E))) {
@@ -837,12 +832,6 @@ private fun HomeScreen(
             Spacer(Modifier.width(10.dp))
             Text("ابدأ الاختبار", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
-        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Icon(Icons.Default.Edit, null)
-            Spacer(Modifier.width(8.dp))
-            Text("إضافة الأسئلة وتعديل الاستنتاجات")
-        }
-        if (configuredCount == 0) Text("أضف سؤالًا واحدًا على الأقل لتتمكن من المتابعة.", color = ColorMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
         OutlinedButton(onClick = onDeveloper, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Code, null)
             Spacer(Modifier.width(8.dp))
@@ -966,7 +955,6 @@ private fun QuestionScreen(
                 }
             }
         }
-        Disclaimer()
     }
 }
 
@@ -1002,11 +990,77 @@ private fun EmptyQuestionsScreen(onEdit: () -> Unit, onBack: () -> Unit) {
 
 @Composable
 private fun ResultScreen(answers: List<SubmittedAnswer>, onAgain: () -> Unit, onShare: () -> Unit) {
+    val flaggedCount = answers.count { it.conclusion.contains("زنا") }
+    val otherCount = answers.size - flaggedCount
+    val total = answers.size.coerceAtLeast(1)
+    val flaggedPercent = (flaggedCount * 100) / total
+    val otherPercent = (otherCount * 100) / total
+    val visualStyle = remember { listOf("إضاءة هادئة", "إضاءة سينمائية").random() }
     ScreenFrame {
         TopBar("التقرير النهائي", onBack = onAgain)
         Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(64.dp))
         Text("تقرير الإجابات والاستنتاجات", fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text("${answers.size} استنتاجًا حسب الإجابات المختارة", color = ColorMuted, textAlign = TextAlign.Center)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF191226),
+            shape = RoundedCornerShape(22.dp),
+            border = BorderStroke(1.dp, Color(0xFF6B49A3))
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FactCheck, null, tint = ColorPurple, modifier = Modifier.size(27.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Text("مؤشر لغوي للإجابات", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+                Text("استنتاجات تتضمن كلمة «زنا»", color = ColorMuted, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { flaggedPercent / 100f },
+                        modifier = Modifier.weight(1f).height(8.dp),
+                        color = ColorPink,
+                        trackColor = Color(0xFF35263E)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("$flaggedPercent%", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+                Text("$flaggedCount من ${answers.size} إجابة", color = ColorText, fontSize = 13.sp)
+                HorizontalDivider(color = Color(0xFF35263E))
+                Text("استنتاجات لا تتضمن الكلمة", color = ColorMuted, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { otherPercent / 100f },
+                        modifier = Modifier.weight(1f).height(8.dp),
+                        color = Color(0xFF7BD6AC),
+                        trackColor = Color(0xFF35263E)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("$otherPercent%", color = ColorText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+                Text("$otherCount من ${answers.size} إجابة", color = ColorText, fontSize = 13.sp)
+                HorizontalDivider(color = Color(0xFF35263E))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Fingerprint, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Column {
+                        Text("مؤشر البصمة", color = ColorText, fontWeight = FontWeight.Bold)
+                        Text("عرض واجهة فقط — لا توجد قراءة للنسب", color = ColorMuted, fontSize = 12.sp)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Face, null, tint = ColorPurple, modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Column {
+                        Text("الوصف البصري", color = ColorText, fontWeight = FontWeight.Bold)
+                        Text("$visualStyle • اختيار عشوائي غير مستنتج من الوجه", color = ColorMuted, fontSize = 12.sp)
+                    }
+                }
+                Text(
+                    "النسب المئوية تصف الكلمات الموجودة في الاستنتاجات المحددة فقط، ولا تعني نسبة شرعية أو زنا.",
+                    color = ColorText, fontSize = 13.sp, lineHeight = 20.sp
+                )
+            }
+        }
         answers.forEachIndexed { index, answer ->
             Surface(
                 modifier = Modifier.fillMaxWidth(), color = ColorPanel,

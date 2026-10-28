@@ -49,7 +49,7 @@ object QuestionnaireEngine {
     /**
      * The single built-in question list used by NASBOLOGY.
      */
-    fun starterQuestionnaire(): List<EditableQuestion> = listOf(
+    private fun previousClaimingStarterQuestionnaire(): List<EditableQuestion> = listOf(
         EditableQuestion(
             1,
             "هل تحب آرام؟",
@@ -172,6 +172,10 @@ object QuestionnaireEngine {
         )
     )
 
+    /** Returns the safe, built-in entertainment questionnaire. */
+    fun starterQuestionnaire(): List<EditableQuestion> =
+        legacyStarterQuestionnaire()
+
     /**
      * Preserves configured saved questions.
      * Unconfigured slots receive the current default question.
@@ -226,13 +230,33 @@ object QuestionnaireEngine {
         if (saved.size != SLOT_COUNT) return saved
 
         val current = starterQuestionnaire()
+        val previous = previousClaimingStarterQuestionnaire()
 
         return saved.mapIndexed { index, question ->
-            if (question.isConfigured) {
-                question
-            } else {
-                current[index]
-            }
+            val safe = current[index]
+            val old = previous[index]
+
+            fun migrateField(value: String, oldDefault: String, safeDefault: String): String =
+                when {
+                    value.isBlank() -> safeDefault
+                    value == oldDefault -> safeDefault
+                    else -> value
+                }
+
+            EditableQuestion(
+                number = safe.number,
+                prompt = migrateField(question.prompt, old.prompt, safe.prompt),
+                yesConclusion = migrateField(
+                    question.yesConclusion,
+                    old.yesConclusion,
+                    safe.yesConclusion
+                ),
+                noConclusion = migrateField(
+                    question.noConclusion,
+                    old.noConclusion,
+                    safe.noConclusion
+                )
+            )
         }
     }
 
@@ -255,10 +279,7 @@ object QuestionnaireEngine {
         scoreWeights.getOrNull(number - 1) ?: 1
 
     /**
-     * Calculates the final result from the selected conclusions.
-     *
-     * Zina percentage = matching conclusions / valid answers.
-     * Sharif/legitimate percentage = matching conclusions / valid answers.
+     * Calculates a weighted, entertainment-only score from the yes/no answers.
      */
     fun calculateResult(
         answers: List<SubmittedAnswer>
@@ -271,72 +292,24 @@ object QuestionnaireEngine {
             return QuestionnaireResult(0, "لم تكتمل الإجابات")
         }
 
-        val selectedConclusions = validAnswers.map { answer ->
-            answer.conclusion.trim()
+        val totalWeight = validAnswers.sumOf { answer ->
+            weightForQuestion(answer.question.number)
+        }
+        val yesWeight = validAnswers.sumOf { answer ->
+            if (answer.answerIsYes) weightForQuestion(answer.question.number) else 0
+        }
+        val percentage = if (totalWeight == 0) {
+            0
+        } else {
+            (yesWeight * 100 / totalWeight).coerceIn(0, 100)
         }
 
-        fun normalizeArabic(text: String): String =
-            text
-                .replace("أ", "ا")
-                .replace("إ", "ا")
-                .replace("آ", "ا")
-                .replace("ى", "ي")
-                .lowercase()
-
-        fun containsTargetWord(
-            text: String,
-            words: List<String>
-        ): Boolean {
-            val normalized = normalizeArabic(text)
-
-            return words.any { word ->
-                normalized.contains(normalizeArabic(word))
-            }
+        val verdict = when {
+            percentage >= 70 -> "طابع تفاعلي مرتفع"
+            percentage <= 30 -> "طابع متحفظ"
+            else -> "طابع متوازن"
         }
 
-        val zinaCount = selectedConclusions.count { conclusion ->
-            containsTargetWord(
-                conclusion,
-                listOf("زنا", "الزنا")
-            )
-        }
-
-        val sharifCount = selectedConclusions.count { conclusion ->
-            containsTargetWord(
-                conclusion,
-                listOf("شريف", "شرعي")
-            )
-        }
-
-        return when {
-            zinaCount > sharifCount -> {
-                val percentage = (
-                    zinaCount * 100f / validAnswers.size
-                ).toInt().coerceIn(0, 100)
-
-                QuestionnaireResult(
-                    percentage,
-                    "ابن زنا بنسبة $percentage%"
-                )
-            }
-
-            sharifCount > zinaCount -> {
-                val percentage = (
-                    sharifCount * 100f / validAnswers.size
-                ).toInt().coerceIn(0, 100)
-
-                QuestionnaireResult(
-                    percentage,
-                    "ابن شرعي بنسبة $percentage%"
-                )
-            }
-
-            else -> {
-                QuestionnaireResult(
-                    50,
-                    "النتيجة متعادلة بنسبة 50%"
-                )
-            }
-        }
+        return QuestionnaireResult(percentage, verdict)
     }
 }
